@@ -345,7 +345,7 @@ export default function Home() {
     <main className="container mx-auto py-6 space-y-6">
       <header className="pb-6 mb-6 border-b">
         <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
-          TinyLM Text Generation
+          TinyChat
         </h1>
         <p className="leading-7 text-muted-foreground">
           Chat with LLMs directly in your browser using TinyLM
