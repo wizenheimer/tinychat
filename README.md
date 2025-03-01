@@ -1,36 +1,112 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<div align="center">
+  <h1> TinyChat </h1>
+  <p>
+    <a href="https://github.com/wizenheimer/tinylm"><strong>Learn More »</strong></a>
+  </p>
+</div>
+
+![Overview](assets/screenshot.png)
+
+TinyChat lets you run language models like DeepSeekR1, Llama3.2 and more locally, right inside your browser using TinyLM library.
+
+## Features
+
+- **Local LLM Inference**: Run language models entirely in your browser
+- **No API Keys**: No external API services or subscriptions required
+- **Streaming Output**: Watch responses generate token by token
+- **Chat Interface**: Natural conversation-based interaction
+- **Customization**: Adjust temperature and generation parameters
+- **Model Selection**: Choose from available lightweight models
+- **System Status**: Monitor WebGPU support and model loading
+- **Persistent Interface**: UI remains responsive during inference
+
+## Technical Stack
+
+- **Next.js** with App Router and TypeScript
+- **TinyLM** for LLM inference
+- **shadcn/ui** for components
+- **WebGPU** (optional) for hardware acceleration
+
+## Browser Requirements
+
+- Modern browser with WebGPU support for optimal performance (Chrome 113+, Edge 113+, or other Chromium browsers)
+- Falls back to WebGL when WebGPU is unavailable, but performance will be degraded
+- Sufficient RAM (8GB+ recommended) for model loading
 
 ## Getting Started
 
-First, run the development server:
+### Installation
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Clone the repository
+git clone https://github.com/wizenheimer/tinychat.git
+cd tinychat
+
+# Install dependencies
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Development
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+# Start the development server
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Production Build
 
-## Learn More
+```bash
+# Build for production
+npm run build
 
-To learn more about Next.js, take a look at the following resources:
+# Start the production server
+npm start
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Usage Guide
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 1. Load a Language Model
 
-## Deploy on Vercel
+- Choose a model from the dropdown menu (e.g., DeepSeek-R1-Distill-Qwen)
+- Adjust the temperature slider (higher values = more creative, lower = more deterministic)
+- Set maximum tokens for response length
+- Click "Load Model" and wait for the loading process to complete
+- The status indicators will show you the model loading progress
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 2. Chat with the Model
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Type your message in the input box
+- Press Enter or click Send to submit your question
+- Watch as the model generates a response in real-time
+- Continue the conversation with follow-up messages
+- Use the Stop button to interrupt generation if needed
+
+### 3. Adjust Settings
+
+- Toggle streaming mode on/off
+- Adjust temperature during conversation for different response styles
+- Change max tokens to control response length
+
+## Performance Notes
+
+- First-time model loading requires downloading model weights (~1-2GB)
+- WebGPU acceleration provides significantly better performance
+- Generation speed varies based on your device's capabilities
+- Laptop/desktop with a discrete GPU recommended for best experience
+- Mobile devices will struggle with larger models
+
+## Limitations
+
+- Limited to models that fit in browser memory
+- Smaller/distilled models only (not full-sized LLMs)
+- Generation speed is slower than server-based solutions
+- Currently supports text generation only (no image generation)
+- No long-term memory beyond the current conversation
+
+## Attribution
+
+This project uses:
+
+- [TinyLM](https://github.com/wizenheimer/tinylm) for browser-based ML inference
+- [DeepSeek-R1-Distill-Qwen-1.5B-ONNX](https://huggingface.co/onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX) for language modeling
+- [shadcn/ui](https://ui.shadcn.com/) for UI components
