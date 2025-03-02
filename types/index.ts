@@ -1,4 +1,5 @@
-import { TinyLM } from 'tinylm';
+// Instead of importing the actual implementation, just import the types
+import type { ProgressUpdate } from 'tinylm';
 
 export interface Message {
   role: 'user' | 'assistant' | 'system';

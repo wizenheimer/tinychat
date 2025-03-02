@@ -15,7 +15,7 @@ import type {
 } from "@/types";
 import { TinyLM } from 'tinylm';
 
-// Import ProgressUpdate type from TinyLM
+// Use type import for ProgressUpdate to avoid circular dependencies
 import type { ProgressUpdate } from 'tinylm';
 
 // Define simplified TinyLM instance interface
