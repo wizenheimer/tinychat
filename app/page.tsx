@@ -281,29 +281,91 @@ export default function Home() {
 
       if (options.stream) {
         // Handle streaming response
-        // Type assertion to handle the response format
-        const stream = tiny.chat.completions.create(options);
+        try {
+          // Get the streaming response from TinyLM
+          const response = await tiny.chat.completions.create(options);
 
-        // Explicitly type assertion for the stream
-        const asyncIterableStream = stream as unknown as AsyncIterable<{
-          choices?: Array<{ delta?: { content?: string } }>;
-        }>;
+          // Properly handle the response based on TinyLM's API
+          // Check if the response has a non-null 'on' method (EventEmitter style API)
+          if (response && typeof (response as any).on === 'function') {
+            let fullResponse = "";
+            const streamResponse = response as any;
 
-        let fullResponse = "";
-        for await (const chunk of asyncIterableStream) {
-          // Safely extract content from the chunk
-          const content = chunk?.choices?.[0]?.delta?.content ?? '';
-          if (content) {
-            updateLastAssistantMessage(fullResponse + content, true);
-            fullResponse += content;
+            // Set up event handlers for the stream
+            streamResponse.on('data', (chunk: any) => {
+              // Extract content from the chunk based on TinyLM's response format
+              const content = chunk?.choices?.[0]?.delta?.content || '';
+              if (content) {
+                fullResponse += content;
+                updateLastAssistantMessage(fullResponse, true);
+              }
+            });
+
+            // Handle stream completion
+            streamResponse.on('end', () => {
+              updateLastAssistantMessage(fullResponse, false);
+              // Save assistant response to conversation
+              setConversation((prev) => [...prev, { role: 'assistant', content: fullResponse }]);
+            });
+
+            // Handle errors in the stream
+            streamResponse.on('error', (err: Error) => {
+              const errorMessage = `Streaming error: ${err.message}`;
+              addLogEntry(errorMessage);
+              updateLastAssistantMessage(errorMessage, false);
+              setConversation((prev) => [...prev, { role: 'assistant', content: errorMessage }]);
+            });
           }
+          // If it's a ReadableStream (Web Streams API)
+          else if (response && (response as any).getReader) {
+            const reader = (response as ReadableStream<any>).getReader();
+            let fullResponse = "";
+
+            // Process the stream chunks
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              // Extract content based on TinyLM's response format
+              const content = value?.choices?.[0]?.delta?.content || '';
+              if (content) {
+                fullResponse += content;
+                updateLastAssistantMessage(fullResponse, true);
+              }
+            }
+
+            // Complete the response
+            updateLastAssistantMessage(fullResponse, false);
+            setConversation((prev) => [...prev, { role: 'assistant', content: fullResponse }]);
+          }
+          // If it's an async iterable - we keep this as a fallback
+          else if (response && typeof (response as any)[Symbol.asyncIterator] === 'function') {
+            const asyncIterableStream = response as AsyncIterable<any>;
+            let fullResponse = "";
+
+            for await (const chunk of asyncIterableStream) {
+              const content = chunk?.choices?.[0]?.delta?.content ?? '';
+              if (content) {
+                fullResponse += content;
+                updateLastAssistantMessage(fullResponse, true);
+              }
+            }
+
+            // Complete the message
+            updateLastAssistantMessage(fullResponse, false);
+            setConversation((prev) => [...prev, { role: 'assistant', content: fullResponse }]);
+          }
+          // If it's none of the above, handle as an error
+          else {
+            throw new Error('Unsupported response format from TinyLM streaming API');
+          }
+        } catch (error: unknown) {
+          const errorWithMessage = error as { message: string };
+          const errorMessage = `Streaming error: ${errorWithMessage.message}`;
+          addLogEntry(errorMessage);
+          updateLastAssistantMessage(errorMessage, false);
+          setConversation((prev) => [...prev, { role: 'assistant', content: errorMessage }]);
         }
-
-        // Complete the message
-        updateLastAssistantMessage(fullResponse, false);
-
-        // Save assistant response to conversation
-        setConversation((prev) => [...prev, { role: 'assistant', content: fullResponse }]);
       } else {
         // Handle regular response
         // Type assertion to handle the response format
