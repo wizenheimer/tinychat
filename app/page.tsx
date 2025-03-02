@@ -18,6 +18,30 @@ import { TinyLM } from 'tinylm';
 // Use type import for ProgressUpdate to avoid circular dependencies
 import type { ProgressUpdate } from 'tinylm';
 
+// Define types for streaming responses
+interface StreamChunk {
+  choices?: Array<{
+    delta?: {
+      content?: string;
+    };
+  }>;
+}
+
+// Define EventEmitter response with separate callback types for each event
+interface EventEmitterResponse {
+  on(event: 'data', callback: (data: StreamChunk) => void): void;
+  on(event: 'end', callback: () => void): void;
+  on(event: 'error', callback: (error: Error) => void): void;
+}
+
+interface WebStreamValue {
+  choices?: Array<{
+    delta?: {
+      content?: string;
+    };
+  }>;
+}
+
 // Define simplified TinyLM instance interface
 interface TinyLMInstance {
   models: {
@@ -286,13 +310,14 @@ export default function Home() {
           const response = await tiny.chat.completions.create(options);
 
           // Properly handle the response based on TinyLM's API
-          // Check if the response has a non-null 'on' method (EventEmitter style API)
-          if (response && typeof (response as any).on === 'function') {
+          // Check if the response has an 'on' method (EventEmitter style API)
+          if (response && typeof response === 'object' && response !== null &&
+            'on' in response && typeof (response as { on: unknown }).on === 'function') {
             let fullResponse = "";
-            const streamResponse = response as any;
+            const streamResponse = response as EventEmitterResponse;
 
             // Set up event handlers for the stream
-            streamResponse.on('data', (chunk: any) => {
+            streamResponse.on('data', (chunk: StreamChunk) => {
               // Extract content from the chunk based on TinyLM's response format
               const content = chunk?.choices?.[0]?.delta?.content || '';
               if (content) {
@@ -317,8 +342,9 @@ export default function Home() {
             });
           }
           // If it's a ReadableStream (Web Streams API)
-          else if (response && (response as any).getReader) {
-            const reader = (response as ReadableStream<any>).getReader();
+          else if (response && typeof response === 'object' && response !== null &&
+            'getReader' in response && typeof (response as { getReader: unknown }).getReader === 'function') {
+            const reader = (response as ReadableStream<WebStreamValue>).getReader();
             let fullResponse = "";
 
             // Process the stream chunks
@@ -339,8 +365,10 @@ export default function Home() {
             setConversation((prev) => [...prev, { role: 'assistant', content: fullResponse }]);
           }
           // If it's an async iterable - we keep this as a fallback
-          else if (response && typeof (response as any)[Symbol.asyncIterator] === 'function') {
-            const asyncIterableStream = response as AsyncIterable<any>;
+          else if (response && typeof response === 'object' && response !== null &&
+            Symbol.asyncIterator in response &&
+            typeof (response as { [Symbol.asyncIterator]: unknown })[Symbol.asyncIterator] === 'function') {
+            const asyncIterableStream = response as AsyncIterable<StreamChunk>;
             let fullResponse = "";
 
             for await (const chunk of asyncIterableStream) {
