@@ -6,14 +6,33 @@ import { ModelControls } from "@/components/model-controls";
 import { ChatInterface } from "@/components/chat-interface";
 import { SystemLog } from "@/components/system-log";
 import { formatBytes, formatTime } from "@/lib/utils";
-import type { 
-  Message, 
-  Log, 
-  ModelConfig, 
+import type {
+  Message,
+  Log,
+  ModelConfig,
   Progress,
   TinyLMCapabilities
 } from "@/types";
 import { TinyLM } from 'tinylm';
+
+// Import ProgressUpdate type from TinyLM
+import type { ProgressUpdate } from 'tinylm';
+
+// Define simplified TinyLM instance interface
+interface TinyLMInstance {
+  models: {
+    check: () => Promise<TinyLMCapabilities>;
+    load: (options: { model: string }) => Promise<void>;
+    offload: (options: { model: string }) => Promise<boolean>;
+    interrupt: () => void;
+  };
+  chat: {
+    completions: {
+      create: (options: unknown) => unknown;
+    };
+  };
+  init: (options: { lazyLoad: boolean }) => Promise<void>;
+}
 
 export default function Home() {
   // System status
@@ -21,14 +40,14 @@ export default function Home() {
   const [fp16Status, setFp16Status] = useState<string>("unknown");
   const [modelStatus, setModelStatus] = useState<string>("not-loaded");
   const [backendValue, setBackendValue] = useState<string>("Unknown");
-  
+
   // Model and generation state
-  const [tiny, setTiny] = useState<any>(null);
+  const [tiny, setTiny] = useState<TinyLMInstance | null>(null);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [streamingEnabled, setStreamingEnabled] = useState<boolean>(true);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [loadedModelName, setLoadedModelName] = useState<string | null>(null);
-  
+
   // Chat state
   const [userInput, setUserInput] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([
@@ -38,7 +57,7 @@ export default function Home() {
     }
   ]);
   const [conversation, setConversation] = useState<Message[]>([]);
-  
+
   // Logs
   const [logs, setLogs] = useState<Log[]>([]);
 
@@ -53,73 +72,34 @@ export default function Home() {
     ]);
   }, []);
 
-  // Initialize TinyLM in useEffect to avoid SSR issues
-  useEffect(() => {
-    const initTinyLM = async () => {
-      if (typeof window === "undefined" || !TinyLM) return;
-      
-      try {
-        addLogEntry("Initializing TinyLM...");
-        
-        // Create TinyLM instance with progress tracking
-        const tinyInstance = new TinyLM({
-          progressCallback: handleProgress,
-          progressThrottleTime: 50
-        });
-        
-        setTiny(tinyInstance);
-        
-        // Check hardware capabilities
-        addLogEntry("Checking hardware capabilities...");
-        const capabilities: TinyLMCapabilities = await tinyInstance.models.check();
-        
-        // Update UI with capabilities
-        setWebGPUStatus(capabilities.isWebGPUSupported ? "available" : "not-available");
-        setFp16Status(capabilities.fp16Supported ? "supported" : "not-supported");
-        
-        if (capabilities.environment && capabilities.environment.backend) {
-          setBackendValue(capabilities.environment.backend);
-        }
-        
-        addLogEntry(`Hardware check: WebGPU ${capabilities.isWebGPUSupported ? 'available' : 'not available'}, FP16 ${capabilities.fp16Supported ? 'supported' : 'not supported'}`);
-        
-        // Initialize TinyLM (without loading model yet)
-        await tinyInstance.init({ lazyLoad: true });
-        
-        addLogEntry("Initialization complete. Ready to load model.");
-      } catch (error: any) {
-        addLogEntry(`Error initializing TinyLM: ${error.message}`);
-      }
-    };
-    
-    initTinyLM();
-  }, [TinyLM, addLogEntry]);
-
   // Handle detailed progress updates
-  const handleProgress = useCallback((progressData: any) => {
+  const handleProgress = useCallback((progressData: ProgressUpdate) => {
     const { status, type, percentComplete, message, files, overall } = progressData;
-    
+
     // Log message
-    let logMessage = `[${status}] (${type || 'unknown'}) ${message || ''}`;
+    const logMessage = `[${status || 'unknown'}] (${type || 'unknown'}) ${message || ''}`;
     addLogEntry(logMessage);
-    
+
     // Update progress data for UI
     if (type === 'model') {
       setProgress({
-        status,
+        status: status || 'unknown',
         type,
-        percentComplete,
+        percentComplete: percentComplete || 0,
         message: message || 'Loading model...',
         files,
         overall: overall ? {
-          ...overall,
+          bytesLoaded: overall.bytesLoaded,
+          bytesTotal: overall.bytesTotal,
+          speed: overall.speed || 0,
+          timeRemaining: overall.timeRemaining || 0,
           formattedLoaded: formatBytes(overall.bytesLoaded),
           formattedTotal: formatBytes(overall.bytesTotal),
           formattedSpeed: overall.speed ? `${formatBytes(overall.speed)}/s` : '0 B/s',
           formattedRemaining: overall.timeRemaining ? formatTime(overall.timeRemaining) : '--'
         } : undefined
       });
-      
+
       // Update model status
       if (status === 'loading' || status === 'initiate' || status === 'progress') {
         setModelStatus('loading');
@@ -135,7 +115,7 @@ export default function Home() {
         setProgress(null);
       }
     }
-    
+
     // Update generation status
     if (type === 'generation') {
       if (status === 'generating') {
@@ -146,38 +126,82 @@ export default function Home() {
     }
   }, [addLogEntry]);
 
+  // Initialize TinyLM in useEffect to avoid SSR issues
+  useEffect(() => {
+    const initTinyLM = async () => {
+      if (typeof window === "undefined" || !TinyLM) return;
+
+      try {
+        addLogEntry("Initializing TinyLM...");
+
+        // Create TinyLM instance with progress tracking
+        const tinyInstance = new TinyLM({
+          progressCallback: handleProgress,
+          progressThrottleTime: 50
+        });
+
+        setTiny(tinyInstance as unknown as TinyLMInstance);
+
+        // Check hardware capabilities
+        addLogEntry("Checking hardware capabilities...");
+        const capabilities: TinyLMCapabilities = await tinyInstance.models.check();
+
+        // Update UI with capabilities
+        setWebGPUStatus(capabilities.isWebGPUSupported ? "available" : "not-available");
+        setFp16Status(capabilities.fp16Supported ? "supported" : "not-supported");
+
+        if (capabilities.environment && capabilities.environment.backend) {
+          setBackendValue(capabilities.environment.backend);
+        }
+
+        addLogEntry(`Hardware check: WebGPU ${capabilities.isWebGPUSupported ? 'available' : 'not available'}, FP16 ${capabilities.fp16Supported ? 'supported' : 'not supported'}`);
+
+        // Initialize TinyLM (without loading model yet)
+        await tinyInstance.init({ lazyLoad: true });
+
+        addLogEntry("Initialization complete. Ready to load model.");
+      } catch (error: unknown) {
+        const errorWithMessage = error as { message: string };
+        addLogEntry(`Error initializing TinyLM: ${errorWithMessage.message}`);
+      }
+    };
+
+    initTinyLM();
+  }, [addLogEntry, handleProgress]);
+
   // Load model
   const handleLoadModel = async (modelConfig: ModelConfig) => {
     if (!tiny) return;
-    
+
     try {
-      const { model, temperature, maxTokens } = modelConfig;
+      const { model } = modelConfig;
       addLogEntry(`Loading model: ${model}`);
-      
+
       // Clear any existing progress
       setProgress(null);
-      
+
       // Update UI state
       setModelStatus('loading');
       setLoadedModelName(model);
-      
+
       // Add system message
       addSystemMessage(`Loading model: ${model}...`);
-      
+
       // Reset conversation
       setConversation([]);
-      
+
       // Load the model
       await tiny.models.load({ model });
-      
+
       // UI updates on success
       addSystemMessage(`Model ${model} loaded successfully! You can start chatting now.`);
       setModelStatus('loaded');
-      
-    } catch (error: any) {
+
+    } catch (error: unknown) {
+      const errorWithMessage = error as { message: string };
       // UI updates on error
-      addLogEntry(`Error loading model: ${error.message}`);
-      addSystemMessage(`Error loading model: ${error.message}`);
+      addLogEntry(`Error loading model: ${errorWithMessage.message}`);
+      addSystemMessage(`Error loading model: ${errorWithMessage.message}`);
       setModelStatus('error');
     }
   };
@@ -185,30 +209,31 @@ export default function Home() {
   // Unload model
   const handleUnloadModel = async () => {
     if (!tiny || !loadedModelName) return;
-    
+
     try {
       addLogEntry(`Unloading model: ${loadedModelName}`);
-      
+
       // Update UI state
       setModelStatus('not-loaded');
-      
+
       // Add system message
       addSystemMessage(`Unloading model: ${loadedModelName}...`);
-      
+
       // Unload the model
       await tiny.models.offload({ model: loadedModelName });
-      
+
       // UI updates on success
       addSystemMessage(`Model ${loadedModelName} unloaded successfully.`);
       setLoadedModelName(null);
-      
+
       // Reset conversation
       setConversation([]);
-      
-    } catch (error: any) {
+
+    } catch (error: unknown) {
+      const errorWithMessage = error as { message: string };
       // UI updates on error
-      addLogEntry(`Error unloading model: ${error.message}`);
-      addSystemMessage(`Error unloading model: ${error.message}`);
+      addLogEntry(`Error unloading model: ${errorWithMessage.message}`);
+      addSystemMessage(`Error unloading model: ${errorWithMessage.message}`);
       setModelStatus('loaded');
     }
   };
@@ -216,17 +241,17 @@ export default function Home() {
   // Send message
   const handleSendMessage = async () => {
     if (!userInput.trim() || !tiny || modelStatus !== 'loaded' || isGenerating) return;
-    
+
     // Add user message to chat
     addUserMessage(userInput);
-    
+
     // Clear input field
     setUserInput("");
-    
+
     // Add message to conversation
     const updatedConversation = [...conversation, { role: 'user' as const, content: userInput }];
     setConversation(updatedConversation);
-    
+
     // Construct messages array with context
     const messages = [
       {
@@ -235,10 +260,10 @@ export default function Home() {
       },
       ...updatedConversation
     ];
-    
+
     // Start assistant message with typing indicator
     addAssistantTypingMessage();
-    
+
     try {
       // Set generation options
       const options = {
@@ -248,18 +273,24 @@ export default function Home() {
         max_tokens: 512, // Use the actual max tokens value from UI
         stream: streamingEnabled
       };
-      
+
       addLogEntry(`Generating response with temperature ${options.temperature} and max_tokens ${options.max_tokens}`);
-      
+
       // Start generation
       const startTime = performance.now();
-      
+
       if (options.stream) {
         // Handle streaming response
-        const stream = await tiny.chat.completions.create(options);
-        
+        // Type assertion to handle the response format
+        const stream = tiny.chat.completions.create(options);
+
+        // Explicitly type assertion for the stream
+        const asyncIterableStream = stream as unknown as AsyncIterable<{
+          choices?: Array<{ delta?: { content?: string } }>;
+        }>;
+
         let fullResponse = "";
-        for await (const chunk of stream) {
+        for await (const chunk of asyncIterableStream) {
           // Safely extract content from the chunk
           const content = chunk?.choices?.[0]?.delta?.content ?? '';
           if (content) {
@@ -267,33 +298,41 @@ export default function Home() {
             fullResponse += content;
           }
         }
-        
+
         // Complete the message
         updateLastAssistantMessage(fullResponse, false);
-        
+
         // Save assistant response to conversation
         setConversation((prev) => [...prev, { role: 'assistant', content: fullResponse }]);
       } else {
         // Handle regular response
-        const response = await tiny.chat.completions.create(options);
-        const content = response.choices[0]?.message?.content || '';
-        
+        // Type assertion to handle the response format
+        const response = await tiny.chat.completions.create(options) as {
+          choices: Array<{ message: { content: string; role: string } }>;
+        };
+
+        const content = response.choices?.[0]?.message?.content || '';
+
         // Update the message
         updateLastAssistantMessage(content, false);
-        
+
         // Save assistant response to conversation
-        setConversation((prev) => [...prev, response.choices[0].message]);
-        
+        setConversation((prev) => [...prev, {
+          role: 'assistant',
+          content
+        }]);
+
         const timeTaken = performance.now() - startTime;
         addLogEntry(`Response generated in ${Math.round(timeTaken)}ms`);
       }
-      
-    } catch (error: any) {
-      addLogEntry(`Error generating response: ${error.message}`);
-      updateLastAssistantMessage(`Error: ${error.message}`, false);
-      
+
+    } catch (error: unknown) {
+      const errorWithMessage = error as { message: string };
+      addLogEntry(`Error generating response: ${errorWithMessage.message}`);
+      updateLastAssistantMessage(`Error: ${errorWithMessage.message}`, false);
+
       // Add error to conversation
-      setConversation((prev) => [...prev, { role: 'assistant', content: `Error: ${error.message}` }]);
+      setConversation((prev) => [...prev, { role: 'assistant', content: `Error: ${errorWithMessage.message}` }]);
     }
   };
 
@@ -328,7 +367,7 @@ export default function Home() {
     setMessages((prev) => {
       const newMessages = [...prev];
       const lastIndex = newMessages.length - 1;
-      
+
       if (lastIndex >= 0 && newMessages[lastIndex].role === "assistant") {
         newMessages[lastIndex] = {
           ...newMessages[lastIndex],
@@ -336,7 +375,7 @@ export default function Home() {
           isTyping
         };
       }
-      
+
       return newMessages;
     });
   };
@@ -352,7 +391,7 @@ export default function Home() {
         </p>
       </header>
 
-      <SystemStatus 
+      <SystemStatus
         webGPUStatus={webGPUStatus}
         fp16Status={fp16Status}
         modelStatus={modelStatus}
@@ -361,7 +400,7 @@ export default function Home() {
         loadedModelName={loadedModelName}
       />
 
-      <ModelControls 
+      <ModelControls
         onLoadModel={handleLoadModel}
         onUnloadModel={handleUnloadModel}
         isModelLoaded={modelStatus === 'loaded'}
@@ -371,7 +410,7 @@ export default function Home() {
         onToggleStreaming={handleToggleStreaming}
       />
 
-      <ChatInterface 
+      <ChatInterface
         messages={messages}
         userInput={userInput}
         setUserInput={setUserInput}

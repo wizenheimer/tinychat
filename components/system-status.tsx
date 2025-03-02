@@ -6,10 +6,10 @@ import { Progress } from "@/components/ui/progress";
 import { SystemStatusProps } from "@/types";
 import { formatBytes, formatTime } from "@/lib/utils";
 
-export function SystemStatus({ 
-  webGPUStatus, 
-  fp16Status, 
-  modelStatus, 
+export function SystemStatus({
+  webGPUStatus,
+  fp16Status,
+  modelStatus,
   backendValue,
   progress,
   loadedModelName
@@ -29,8 +29,8 @@ export function SystemStatus({
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="flex items-center">
-            <span 
-              className={`inline-block w-3 h-3 rounded-full mr-2 ${getStatusColor(webGPUStatus)}`} 
+            <span
+              className={`inline-block w-3 h-3 rounded-full mr-2 ${getStatusColor(webGPUStatus)}`}
             />
             <div>
               <strong>WebGPU:</strong>{" "}
@@ -38,8 +38,8 @@ export function SystemStatus({
             </div>
           </div>
           <div className="flex items-center">
-            <span 
-              className={`inline-block w-3 h-3 rounded-full mr-2 ${getStatusColor(fp16Status)}`} 
+            <span
+              className={`inline-block w-3 h-3 rounded-full mr-2 ${getStatusColor(fp16Status)}`}
             />
             <div>
               <strong>FP16 Support:</strong>{" "}
@@ -47,12 +47,15 @@ export function SystemStatus({
             </div>
           </div>
           <div className="flex items-center">
-            <span 
-              className={`inline-block w-3 h-3 rounded-full mr-2 ${getStatusColor(modelStatus)}`} 
+            <span
+              className={`inline-block w-3 h-3 rounded-full mr-2 ${getStatusColor(modelStatus)}`}
             />
             <div>
               <strong>Model Status:</strong>{" "}
               <span>{modelStatus === 'loaded' ? 'Loaded' : modelStatus === 'loading' ? 'Loading...' : 'Not Loaded'}</span>
+              {loadedModelName && modelStatus === 'loaded' && (
+                <span className="ml-1">({loadedModelName})</span>
+              )}
             </div>
           </div>
           <div className="flex items-center">
@@ -69,7 +72,7 @@ export function SystemStatus({
               <span>{progress.percentComplete}%</span>
             </div>
             <Progress value={progress.percentComplete} className="h-2" />
-            
+
             {progress.overall && (
               <div className="flex justify-between text-sm text-muted-foreground mt-2">
                 <div>
